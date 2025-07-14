@@ -34,26 +34,26 @@ The plugin provides two interfaces:
 Example: `powershell.exe -Command "npm run build"`
 
 ### Build & Test
-- `npm run build` - Clean, generate docs, compile TypeScript, and bundle
-- `npm run test` - Run Jest tests  
-- `npm run test:coverage` - Run tests with coverage
-- `npm run test:watch` - Run tests in watch mode
+- `powershell.exe -Command "npm run build"` - Clean, generate docs, compile TypeScript, and bundle
+- `powershell.exe -Command "npm run test"` - Run Jest tests  
+- `powershell.exe -Command "npm run test:coverage"` - Run tests with coverage
+- `powershell.exe -Command "npm run test:watch"` - Run tests in watch mode
 
 ### Platform Verification  
-- `npm run verify` - Verify all platforms (iOS, Android, web)
-- `npm run verify:ios` - Build and test iOS implementation
-- `npm run verify:android` - Build and test Android implementation  
-- `npm run verify:web` - Run web tests and build
+- `powershell.exe -Command "npm run verify"` - Verify all platforms (iOS, Android, web)
+- `powershell.exe -Command "npm run verify:ios"` - Build and test iOS implementation
+- `powershell.exe -Command "npm run verify:android"` - Build and test Android implementation  
+- `powershell.exe -Command "npm run verify:web"` - Run web tests and build
 
 ### Code Quality
-- `npm run lint` - Run ESLint, Prettier, and Swift lint
-- `npm run fmt` - Auto-fix linting issues
-- `npm run eslint` - ESLint for TypeScript
-- `npm run prettier` - Prettier for code formatting
-- `npm run swiftlint` - SwiftLint for iOS code
+- `powershell.exe -Command "npm run lint"` - Run ESLint, Prettier, and Swift lint
+- `powershell.exe -Command "npm run fmt"` - Auto-fix linting issues
+- `powershell.exe -Command "npm run eslint"` - ESLint for TypeScript
+- `powershell.exe -Command "npm run prettier"` - Prettier for code formatting
+- `powershell.exe -Command "npm run swiftlint"` - SwiftLint for iOS code
 
 ### Documentation
-- `npm run docgen` - Generate API documentation from JSDoc comments
+- `powershell.exe -Command "npm run docgen"` - Generate API documentation from JSDoc comments
 - Output goes to README.md and dist/docs.json
 
 ## Important Development Notes
