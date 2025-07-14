@@ -29,9 +29,9 @@ The plugin provides two interfaces:
 
 ## Development Commands
 
-**WSL Environment Note**: When running in WSL, execute npm/node commands using `powershell.exe` to run in the host Windows context for better compatibility with Node.js tooling and file system operations.
+**WSL Environment Note**: When running in WSL, execute npm/node commands using `powershell.exe -Command` to run in the host Windows context for better compatibility with Node.js tooling and file system operations.
 
-Example: `powershell.exe npm run build`
+Example: `powershell.exe -Command "npm run build"`
 
 ### Build & Test
 - `npm run build` - Clean, generate docs, compile TypeScript, and bundle
