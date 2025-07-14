@@ -12,6 +12,7 @@ import type {
   ReadResult,
   RequestBleDeviceOptions,
   ScanResult,
+  ScanResultBatch,
   ScanResultInternal,
   TimeoutOptions,
 } from './definitions';
@@ -114,6 +115,16 @@ export interface BleClientInterface {
    * @param callback
    */
   requestLEScan(options: RequestBleDeviceOptions, callback: (result: ScanResult) => void): Promise<void>;
+
+  /**
+   * Start scanning for BLE devices with batched results to reduce bridge overhead when many devices are present.
+   * The batch callback will be invoked with multiple scan results at regular intervals.
+   * Scanning will continue until `stopLEScan` is called.
+   * **Note**: Android only. Falls back to individual results on other platforms.
+   * @param options
+   * @param batchCallback Callback for batched scan results
+   */
+  requestLEScanBatch(options: RequestBleDeviceOptions, batchCallback: (results: ScanResult[]) => void): Promise<void>;
 
   /**
    * Stop scanning for BLE devices. For an example, see [usage](#usage).
@@ -314,6 +325,7 @@ export interface BleClientInterface {
 
 class BleClientClass implements BleClientInterface {
   private scanListener: PluginListenerHandle | null = null;
+  private batchScanListener: PluginListenerHandle | null = null;
   private eventListeners = new Map<string, PluginListenerHandle>();
   private queue = getQueue(true);
 
@@ -421,8 +433,11 @@ class BleClientClass implements BleClientInterface {
 
   async requestLEScan(options: RequestBleDeviceOptions, callback: (result: ScanResult) => void): Promise<void> {
     options = this.validateRequestBleDeviceOptions(options);
+    // Force disable batching for individual result callback
+    options = { ...options, enableBatching: false };
     await this.queue(async () => {
       await this.scanListener?.remove();
+      await this.batchScanListener?.remove();
       this.scanListener = await BluetoothLe.addListener('onScanResult', (resultInternal: ScanResultInternal) => {
         const result: ScanResult = {
           ...resultInternal,
@@ -438,10 +453,52 @@ class BleClientClass implements BleClientInterface {
     });
   }
 
+  async requestLEScanBatch(options: RequestBleDeviceOptions, batchCallback: (results: ScanResult[]) => void): Promise<void> {
+    options = this.validateRequestBleDeviceOptions(options);
+    // Enable batching by default for batch callback
+    options = { enableBatching: true, ...options };
+    await this.queue(async () => {
+      await this.scanListener?.remove();
+      await this.batchScanListener?.remove();
+      
+      if (Capacitor.getPlatform() === 'android') {
+        this.batchScanListener = await BluetoothLe.addListener('onScanResultBatch', (batchResult: ScanResultBatch) => {
+          const results: ScanResult[] = batchResult.results.map((resultInternal: ScanResultInternal) => ({
+            ...resultInternal,
+            manufacturerData: this.convertObject(resultInternal.manufacturerData),
+            serviceData: this.convertObject(resultInternal.serviceData),
+            rawAdvertisement: resultInternal.rawAdvertisement
+              ? this.convertValue(resultInternal.rawAdvertisement)
+              : undefined,
+          }));
+          batchCallback(results);
+        });
+      } else {
+        // Fallback to individual results on non-Android platforms
+        this.scanListener = await BluetoothLe.addListener('onScanResult', (resultInternal: ScanResultInternal) => {
+          const result: ScanResult = {
+            ...resultInternal,
+            manufacturerData: this.convertObject(resultInternal.manufacturerData),
+            serviceData: this.convertObject(resultInternal.serviceData),
+            rawAdvertisement: resultInternal.rawAdvertisement
+              ? this.convertValue(resultInternal.rawAdvertisement)
+              : undefined,
+          };
+          batchCallback([result]); // Wrap in array for consistent interface
+        });
+        options = { ...options, enableBatching: false }; // Disable batching on non-Android
+      }
+      
+      await BluetoothLe.requestLEScan(options);
+    });
+  }
+
   async stopLEScan(): Promise<void> {
     await this.queue(async () => {
       await this.scanListener?.remove();
+      await this.batchScanListener?.remove();
       this.scanListener = null;
+      this.batchScanListener = null;
       await BluetoothLe.stopLEScan();
     });
   }

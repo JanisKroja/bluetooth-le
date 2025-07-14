@@ -21,6 +21,12 @@ class ScanResponse(
     val device: BluetoothDevice?,
 )
 
+class BatchScanResponse(
+    val success: Boolean,
+    val message: String?,
+    val results: List<ScanResult>,
+)
+
 class DisplayStrings(
     val scanning: String,
     val cancel: String,
@@ -35,6 +41,7 @@ class DeviceScanner(
     private val scanDuration: Long?,
     private val displayStrings: DisplayStrings,
     private val showDialog: Boolean,
+    private val batchInterval: Long = 50L,
 ) {
     companion object {
         private val TAG = DeviceScanner::class.java.simpleName
@@ -44,6 +51,7 @@ class DeviceScanner(
     private val bluetoothLeScanner = bluetoothAdapter.bluetoothLeScanner
     private var savedCallback: ((ScanResponse) -> Unit)? = null
     private var scanResultCallback: ((ScanResult) -> Unit)? = null
+    private var batchScanResultCallback: ((BatchScanResponse) -> Unit)? = null
     private var adapter: ArrayAdapter<String>? = null
     private val deviceList = DeviceList()
     private var deviceStrings: ArrayList<String> = ArrayList()
@@ -52,6 +60,11 @@ class DeviceScanner(
     private var stopScanHandler: Handler? = null
     private var allowDuplicates: Boolean = false
     private var namePrefix: String = ""
+    
+    // Batching related properties
+    private val resultBuffer = mutableListOf<ScanResult>()
+    private var batchHandler: Handler? = null
+    private val batchLock = Any()
 
     private val scanCallback: ScanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
@@ -71,7 +84,11 @@ class DeviceScanner(
                 }
             } else {
                 if (allowDuplicates || isNew) {
-                    scanResultCallback?.invoke(result)
+                    if (batchScanResultCallback != null) {
+                        addToBatch(result)
+                    } else {
+                        scanResultCallback?.invoke(result)
+                    }
                 }
             }
         }
@@ -83,10 +100,12 @@ class DeviceScanner(
         allowDuplicates: Boolean,
         namePrefix: String,
         callback: (ScanResponse) -> Unit,
-        scanResultCallback: ((ScanResult) -> Unit)?
+        scanResultCallback: ((ScanResult) -> Unit)?,
+        batchScanResultCallback: ((BatchScanResponse) -> Unit)? = null
     ) {
         this.savedCallback = callback
         this.scanResultCallback = scanResultCallback
+        this.batchScanResultCallback = batchScanResultCallback
         this.allowDuplicates = allowDuplicates
         this.namePrefix = namePrefix
 
@@ -101,6 +120,9 @@ class DeviceScanner(
                 dialogHandler = Handler(Looper.getMainLooper())
                 showDeviceList()
             } else {
+                if (batchScanResultCallback != null) {
+                    initializeBatchHandler()
+                }
                 savedCallback?.invoke(
                     ScanResponse(
                         true, "Started scanning.", null
@@ -122,6 +144,7 @@ class DeviceScanner(
     fun stopScanning() {
         stopScanHandler?.removeCallbacksAndMessages(null)
         stopScanHandler = null
+        flushBatchAndCleanup()
         if (showDialog) {
             dialogHandler?.post {
                 if (deviceList.getCount() == 0) {
@@ -184,6 +207,52 @@ class DeviceScanner(
                     stopScanning()
                 }, scanDuration
             )
+        }
+    }
+
+    private fun addToBatch(result: ScanResult) {
+        synchronized(batchLock) {
+            resultBuffer.add(result)
+        }
+    }
+
+    private fun initializeBatchHandler() {
+        batchHandler = Handler(Looper.getMainLooper())
+        scheduleBatchFlush()
+    }
+
+    private fun scheduleBatchFlush() {
+        batchHandler?.postDelayed({
+            flushBatch()
+            if (isScanning && batchScanResultCallback != null) {
+                scheduleBatchFlush()
+            }
+        }, batchInterval)
+    }
+
+    private fun flushBatch() {
+        val resultsToFlush: List<ScanResult>
+        synchronized(batchLock) {
+            if (resultBuffer.isEmpty()) {
+                return
+            }
+            resultsToFlush = resultBuffer.toList()
+            resultBuffer.clear()
+        }
+        
+        batchScanResultCallback?.invoke(
+            BatchScanResponse(
+                true, "Batch scan results.", resultsToFlush
+            )
+        )
+    }
+
+    private fun flushBatchAndCleanup() {
+        batchHandler?.removeCallbacksAndMessages(null)
+        batchHandler = null
+        flushBatch()
+        synchronized(batchLock) {
+            resultBuffer.clear()
         }
     }
 

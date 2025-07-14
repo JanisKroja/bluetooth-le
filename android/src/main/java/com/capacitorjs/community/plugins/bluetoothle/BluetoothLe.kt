@@ -325,6 +325,7 @@ class BluetoothLe : Plugin() {
             scanDuration = MAX_SCAN_DURATION,
             displayStrings = displayStrings!!,
             showDialog = true,
+            batchInterval = 50L,
         )
         deviceScanner?.startScanning(
             scanFilters, scanSettings, false, namePrefix, { scanResponse ->
@@ -341,7 +342,7 @@ class BluetoothLe : Plugin() {
 
                     }
                 }
-            }, null
+            }, null, null
         )
     }
 
@@ -352,6 +353,8 @@ class BluetoothLe : Plugin() {
         val scanSettings = getScanSettings(call) ?: return
         val namePrefix = call.getString("namePrefix", "") as String
         val allowDuplicates = call.getBoolean("allowDuplicates", false) as Boolean
+        val batchInterval = call.getLong("batchInterval", 50L) as Long
+        val enableBatching = call.getBoolean("enableBatching", true) as Boolean
 
         try {
             deviceScanner?.stopScanning()
@@ -367,31 +370,69 @@ class BluetoothLe : Plugin() {
             scanDuration = null,
             displayStrings = displayStrings!!,
             showDialog = false,
+            batchInterval = batchInterval,
         )
-        deviceScanner?.startScanning(
-            scanFilters,
-            scanSettings,
-            allowDuplicates,
-            namePrefix,
-            { scanResponse ->
-                run {
-                    if (scanResponse.success) {
-                        call.resolve()
-                    } else {
-                        call.reject(scanResponse.message)
+        if (enableBatching) {
+            deviceScanner?.startScanning(
+                scanFilters,
+                scanSettings,
+                allowDuplicates,
+                namePrefix,
+                { scanResponse ->
+                    run {
+                        if (scanResponse.success) {
+                            call.resolve()
+                        } else {
+                            call.reject(scanResponse.message)
+                        }
+                    }
+                },
+                null,
+                { batchResponse ->
+                    run {
+                        val scanResults = JSArray()
+                        batchResponse.results.forEach { result ->
+                            val scanResult = getScanResult(result)
+                            scanResults.put(scanResult)
+                        }
+                        val batchResult = JSObject()
+                        batchResult.put("results", scanResults)
+                        try {
+                            notifyListeners("onScanResultBatch", batchResult)
+                        } catch (e: ConcurrentModificationException) {
+                            Logger.error(TAG, "Error in notifyListeners: ${e.localizedMessage}", e)
+                        }
                     }
                 }
-            },
-            { result ->
-                run {
-                    val scanResult = getScanResult(result)
-                    try {
-                        notifyListeners("onScanResult", scanResult)
-                    } catch (e: ConcurrentModificationException) {
-                        Logger.error(TAG, "Error in notifyListeners: ${e.localizedMessage}", e)
+            )
+        } else {
+            deviceScanner?.startScanning(
+                scanFilters,
+                scanSettings,
+                allowDuplicates,
+                namePrefix,
+                { scanResponse ->
+                    run {
+                        if (scanResponse.success) {
+                            call.resolve()
+                        } else {
+                            call.reject(scanResponse.message)
+                        }
                     }
-                }
-            })
+                },
+                { result ->
+                    run {
+                        val scanResult = getScanResult(result)
+                        try {
+                            notifyListeners("onScanResult", scanResult)
+                        } catch (e: ConcurrentModificationException) {
+                            Logger.error(TAG, "Error in notifyListeners: ${e.localizedMessage}", e)
+                        }
+                    }
+                },
+                null
+            )
+        }
     }
 
     @PluginMethod

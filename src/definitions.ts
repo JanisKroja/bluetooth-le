@@ -51,6 +51,18 @@ export interface RequestBleDeviceOptions {
    * https://developer.mozilla.org/en-US/docs/Web/API/Bluetooth/requestDevice#manufacturerdata
    */
   manufacturerData?: ManufacturerDataFilter[];
+  /**
+   * Enable batching of scan results to reduce bridge overhead when scanning many devices.
+   * When enabled, scan results are collected and delivered in batches at regular intervals.
+   * (Android only, default: true)
+   */
+  enableBatching?: boolean;
+  /**
+   * Interval in milliseconds for delivering batched scan results.
+   * Only applies when enableBatching is true.
+   * (Android only, default: 50)
+   */
+  batchInterval?: number;
 }
 
 /**
@@ -295,6 +307,13 @@ export interface ScanResult {
   rawAdvertisement?: DataView;
 }
 
+export interface ScanResultBatch {
+  /**
+   * Array of scan results delivered in a batch.
+   */
+  results: ScanResult[];
+}
+
 export interface BluetoothLePlugin {
   initialize(options?: InitializeOptions): Promise<void>;
   isEnabled(): Promise<BooleanResult>;
@@ -322,6 +341,10 @@ export interface BluetoothLePlugin {
   addListener(
     eventName: 'onScanResult',
     listenerFunc: (result: ScanResultInternal) => void,
+  ): Promise<PluginListenerHandle>;
+  addListener(
+    eventName: 'onScanResultBatch',
+    listenerFunc: (result: ScanResultBatch) => void,
   ): Promise<PluginListenerHandle>;
   connect(options: DeviceIdOptions & TimeoutOptions): Promise<void>;
   createBond(options: DeviceIdOptions & TimeoutOptions): Promise<void>;
